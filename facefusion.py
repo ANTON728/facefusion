@@ -7,4 +7,5 @@ os.environ['OMP_NUM_THREADS'] = '1'
 from facefusion import core
 
 if __name__ == '__main__':
+	print("код запустился")
 	core.cli()
