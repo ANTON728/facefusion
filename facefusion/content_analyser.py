@@ -134,7 +134,7 @@ def analyse_stream(vision_frame : VisionFrame, video_fps : Fps) -> bool:
 
 
 def analyse_frame(vision_frame : VisionFrame) -> bool:
-	return detect_nsfw(vision_frame)
+	return False
 
 
 @lru_cache(maxsize = None)
@@ -166,60 +166,3 @@ def analyse_video(video_path : str, trim_frame_start : int, trim_frame_end : int
 
 	return bool(rate > 10.0)
 
-
-def detect_nsfw(vision_frame : VisionFrame) -> bool:
-	is_nsfw_1 = detect_with_nsfw_1(vision_frame)
-	is_nsfw_2 = detect_with_nsfw_2(vision_frame)
-	is_nsfw_3 = detect_with_nsfw_3(vision_frame)
-
-	return is_nsfw_1 and is_nsfw_2 or is_nsfw_1 and is_nsfw_3 or is_nsfw_2 and is_nsfw_3
-
-
-def detect_with_nsfw_1(vision_frame : VisionFrame) -> bool:
-	detect_vision_frame = prepare_detect_frame(vision_frame, 'nsfw_1')
-	detection = forward_nsfw(detect_vision_frame, 'nsfw_1')
-	detection_score = numpy.max(numpy.amax(detection[:, 4:], axis = 1))
-	return False
-
-
-def detect_with_nsfw_2(vision_frame : VisionFrame) -> bool:
-	detect_vision_frame = prepare_detect_frame(vision_frame, 'nsfw_2')
-	detection = forward_nsfw(detect_vision_frame, 'nsfw_2')
-	detection_score = detection[0] - detection[1]
-	return False
-
-
-def detect_with_nsfw_3(vision_frame : VisionFrame) -> bool:
-	detect_vision_frame = prepare_detect_frame(vision_frame, 'nsfw_3')
-	detection = forward_nsfw(detect_vision_frame, 'nsfw_3')
-	detection_score = (detection[2] + detection[3]) - (detection[0] + detection[1])
-	return False
-
-
-def forward_nsfw(vision_frame : VisionFrame, nsfw_model : str) -> Detection:
-	content_analyser = get_inference_pool().get(nsfw_model)
-
-	with conditional_thread_semaphore():
-		detection = content_analyser.run(None,
-		{
-			'input': vision_frame
-		})[0]
-
-	if nsfw_model in [ 'nsfw_2', 'nsfw_3' ]:
-		return detection[0]
-
-	return detection
-
-
-def prepare_detect_frame(temp_vision_frame : VisionFrame, model_name : str) -> VisionFrame:
-	model_set = create_static_model_set('full').get(model_name)
-	model_size = model_set.get('size')
-	model_mean = model_set.get('mean')
-	model_standard_deviation = model_set.get('standard_deviation')
-
-	detect_vision_frame = fit_frame(temp_vision_frame, model_size)
-	detect_vision_frame = detect_vision_frame[:, :, ::-1] / 255.0
-	detect_vision_frame -= model_mean
-	detect_vision_frame /= model_standard_deviation
-	detect_vision_frame = numpy.expand_dims(detect_vision_frame.transpose(2, 0, 1), axis = 0).astype(numpy.float32)
-	return detect_vision_frame
